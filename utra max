@@ -1,0 +1,535 @@
+-- GiHung Hub — Performance Toolkit (Safe version)
+-- Purpose: client-side performance/UI toolkit (Potato Mode, FPS monitor, adaptive optimization, nice load effects)
+-- Does NOT include movement hacks, noclip, infinite jump, or script loaders.
+
+-- Services
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Lighting = game:GetService("Lighting")
+local UserInputService = game:GetService("UserInputService")
+local CoreGui = game:GetService("CoreGui")
+local HttpService = game:GetService("HttpService")
+
+local LocalPlayer = Players.LocalPlayer
+
+-- ===== Config =====
+local CONFIG = {
+    WindowSize = UDim2.new(0,520,0,420),
+    ThemeDark = {bg = Color3.fromRGB(18,18,20), panel = Color3.fromRGB(30,30,34), accent = Color3.fromRGB(0,200,120), text = Color3.fromRGB(235,235,235)},
+    UltraFPS_Quality = Enum.QualityLevel.Level01,
+    Default_Quality = Enum.QualityLevel.Level21,
+    Potato_Mode = false,
+    AdaptiveFPS_Threshold = 50 -- fps threshold to auto-reduce visuals
+}
+
+-- ===== Helper functions =====
+local function safeWait(t) if type(t)~='number' then t=0.03 end wait(t) end
+
+local function createInstance(class, props, parent)
+    local obj = Instance.new(class)
+    if props then
+        for k,v in pairs(props) do obj[k] = v end
+    end
+    if parent then obj.Parent = parent end
+    return obj
+end
+
+-- Remove previous GUI if exists
+pcall(function() CoreGui:FindFirstChild("GiHung_PerfUI"):Destroy() end)
+
+-- ===== Root GUI =====
+local ScreenGui = createInstance("ScreenGui", {Name="GiHung_PerfUI", ResetOnSpawn=false}, CoreGui)
+ScreenGui.IgnoreGuiInset = true
+
+local MainFrame = createInstance("Frame", {
+    Name = "MainFrame",
+    Size = CONFIG.WindowSize,
+    Position = UDim2.new(0.5, -CONFIG.WindowSize.X.Offset/2, 0.5, -CONFIG.WindowSize.Y.Offset/2),
+    AnchorPoint = Vector2.new(0.5,0.5),
+    BackgroundColor3 = CONFIG.ThemeDark.bg,
+    BorderSizePixel = 0,
+}, ScreenGui)
+MainFrame.Active = true
+MainFrame.Draggable = true
+
+-- Top bar title
+local Title = createInstance("TextLabel", {
+    Parent = MainFrame,
+    Size = UDim2.new(1,0,0,36),
+    Position = UDim2.new(0,0,0,0),
+    BackgroundTransparency = 1,
+    Text = "GiHung Hub — Performance Toolkit (safe)",
+    TextColor3 = CONFIG.ThemeDark.text,
+    Font = Enum.Font.GothamBold,
+    TextSize = 18,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    TextYAlignment = Enum.TextYAlignment.Center,
+    Padding = Enum.Padding.None
+}, MainFrame)
+
+-- Tab container
+local TabsFrame = createInstance("Frame", {
+    Parent = MainFrame,
+    Size = UDim2.new(0,150,1,-36),
+    Position = UDim2.new(0,8,0,40),
+    BackgroundColor3 = CONFIG.ThemeDark.panel,
+    BorderSizePixel = 0,
+}, MainFrame)
+
+local ContentFrame = createInstance("Frame", {
+    Parent = MainFrame,
+    Size = UDim2.new(1,-170,1,-50),
+    Position = UDim2.new(0,162,0,40),
+    BackgroundColor3 = Color3.fromRGB(12,12,12),
+    BorderSizePixel = 0,
+}, MainFrame)
+
+-- Basic UI styling helpers
+local function newButton(parent, text, posY)
+    local b = createInstance("TextButton", {
+        Parent = parent,
+        Size = UDim2.new(1,-6,0,34),
+        Position = UDim2.new(0,3,0,posY),
+        BackgroundColor3 = CONFIG.ThemeDark.bg,
+        TextColor3 = CONFIG.ThemeDark.text,
+        Font = Enum.Font.GothamSemibold,
+        TextSize = 14,
+        Text = text,
+    }, parent)
+    return b
+end
+
+-- Tabs list and content creators
+local tabsOrder = {"Main","Graphics","Potato","AutoOptimize","LoadEffects","Hotkeys","About"}
+local tabButtons = {}
+local panels = {}
+
+for i, name in ipairs(tabsOrder) do
+    tabButtons[name] = newButton(TabsFrame, name, (i-1)*40 + 8)
+    panels[name] = createInstance("Frame", {
+        Parent = ContentFrame,
+        Size = UDim2.new(1, -10, 1, -10),
+        Position = UDim2.new(0,5,0,5),
+        BackgroundTransparency = 1,
+        Visible = false
+    }, ContentFrame)
+end
+
+-- Activate first tab
+panels["Main"].Visible = true
+tabButtons["Main"].BackgroundColor3 = CONFIG.ThemeDark.panel
+
+local function switchTab(name)
+    for k,v in pairs(panels) do v.Visible = false end
+    panels[name].Visible = true
+    for k,v in pairs(tabButtons) do
+        v.BackgroundColor3 = (k==name) and CONFIG.ThemeDark.panel or CONFIG.ThemeDark.bg
+    end
+end
+
+for name, btn in pairs(tabButtons) do
+    btn.MouseButton1Click:Connect(function()
+        switchTab(name)
+    end)
+end
+
+-- ===== Main panel content =====
+local mainPanel = panels["Main"]
+local fpsLabel = createInstance("TextLabel", {
+    Parent = mainPanel,
+    Position = UDim2.new(0,10,0,6),
+    Size = UDim2.new(0,300,0,28),
+    BackgroundTransparency = 1,
+    TextColor3 = CONFIG.ThemeDark.text,
+    Font = Enum.Font.GothamSemibold,
+    TextSize = 16,
+    Text = "FPS: --"
+}, mainPanel)
+
+local pingLabel = createInstance("TextLabel", {
+    Parent = mainPanel,
+    Position = UDim2.new(0,10,0,38),
+    Size = UDim2.new(0,300,0,24),
+    BackgroundTransparency = 1,
+    TextColor3 = CONFIG.ThemeDark.text,
+    Font = Enum.Font.Gotham,
+    TextSize = 14,
+    Text = "Ping (approx): -- ms"
+}, mainPanel)
+
+local memLabel = createInstance("TextLabel", {
+    Parent = mainPanel,
+    Position = UDim2.new(0,10,0,62),
+    Size = UDim2.new(0,300,0,24),
+    BackgroundTransparency = 1,
+    TextColor3 = CONFIG.ThemeDark.text,
+    Font = Enum.Font.Gotham,
+    TextSize = 14,
+    Text = "Memory (KB): --"
+}, mainPanel)
+
+local UltraFPSBtn = createInstance("TextButton", {
+    Parent = mainPanel,
+    Position = UDim2.new(0,10,0,100),
+    Size = UDim2.new(0,180,0,36),
+    BackgroundColor3 = CONFIG.ThemeDark.panel,
+    Text = "Toggle Ultra FPS Mode",
+    Font = Enum.Font.GothamSemibold,
+    TextSize = 14,
+    TextColor3 = CONFIG.ThemeDark.text
+}, mainPanel)
+
+local AutoAdaptiveLabel = createInstance("TextLabel", {
+    Parent = mainPanel,
+    Position = UDim2.new(0,210,0,100),
+    Size = UDim2.new(0,250,0,36),
+    BackgroundTransparency = 1,
+    TextColor3 = CONFIG.ThemeDark.text,
+    Font = Enum.Font.Gotham,
+    TextSize = 13,
+    Text = "Adaptive: ON (auto lower effects if FPS drops)"
+}, mainPanel)
+
+-- ===== Graphics panel =====
+local gPanel = panels["Graphics"]
+local qualityLabel = createInstance("TextLabel", {
+    Parent = gPanel,
+    Position = UDim2.new(0,10,0,6),
+    Size = UDim2.new(0,300,0,24),
+    BackgroundTransparency = 1,
+    Text = "Rendering Quality / Lighting controls",
+    TextColor3 = CONFIG.ThemeDark.text,
+    Font = Enum.Font.GothamSemibold,
+    TextSize = 14
+}, gPanel)
+
+local btnLowerQuality = createInstance("TextButton", {
+    Parent = gPanel,
+    Position = UDim2.new(0,10,0,40),
+    Size = UDim2.new(0,160,0,34),
+    BackgroundColor3 = CONFIG.ThemeDark.panel,
+    Text = "Lower Quality (Potato)",
+    Font = Enum.Font.GothamSemibold,
+    TextSize = 14,
+    TextColor3 = CONFIG.ThemeDark.text
+}, gPanel)
+
+local btnRestoreQuality = createInstance("TextButton", {
+    Parent = gPanel,
+    Position = UDim2.new(0,180,0,40),
+    Size = UDim2.new(0,160,0,34),
+    BackgroundColor3 = CONFIG.ThemeDark.panel,
+    Text = "Restore Quality",
+    Font = Enum.Font.GothamSemibold,
+    TextSize = 14,
+    TextColor3 = CONFIG.ThemeDark.text
+}, gPanel)
+
+-- ===== Potato panel =====
+local pPanel = panels["Potato"]
+local PotatoToggle = createInstance("TextButton", {
+    Parent = pPanel,
+    Position = UDim2.new(0,10,0,6),
+    Size = UDim2.new(0,200,0,36),
+    BackgroundColor3 = CONFIG.ThemeDark.panel,
+    Text = "Enable Potato Mode",
+    Font = Enum.Font.GothamSemibold,
+    TextSize = 14,
+    TextColor3 = CONFIG.ThemeDark.text
+}, pPanel)
+
+-- ===== AutoOptimize panel =====
+local optPanel = panels["AutoOptimize"]
+local btnRunCleanup = createInstance("TextButton", {
+    Parent = optPanel,
+    Position = UDim2.new(0,10,0,6),
+    Size = UDim2.new(0,200,0,36),
+    BackgroundColor3 = CONFIG.ThemeDark.panel,
+    Text = "Run Cleanup Now",
+    Font = Enum.Font.GothamSemibold,
+    TextSize = 14,
+    TextColor3 = CONFIG.ThemeDark.text
+}, optPanel)
+
+local lblCleanupInfo = createInstance("TextLabel", {
+    Parent = optPanel,
+    Position = UDim2.new(0,10,0,50),
+    Size = UDim2.new(1,-20,0,60),
+    BackgroundTransparency = 1,
+    Text = "Cleanup will disable heavy particle emitters and remove textures/decals client-side to free memory.",
+    TextWrapped = true,
+    TextColor3 = CONFIG.ThemeDark.text,
+    Font = Enum.Font.Gotham,
+    TextSize = 13
+}, optPanel)
+
+-- ===== LoadEffects panel =====
+local lePanel = panels["LoadEffects"]
+local btnPlayLoad = createInstance("TextButton", {
+    Parent = lePanel,
+    Position = UDim2.new(0,10,0,6),
+    Size = UDim2.new(0,200,0,36),
+    BackgroundColor3 = CONFIG.ThemeDark.panel,
+    Text = "Play Load Effect",
+    Font = Enum.Font.GothamSemibold,
+    TextSize = 14,
+    TextColor3 = CONFIG.ThemeDark.text
+}, lePanel)
+local sfxToggle = createInstance("TextButton", {
+    Parent = lePanel,
+    Position = UDim2.new(0,220,0,6),
+    Size = UDim2.new(0,200,0,36),
+    BackgroundColor3 = CONFIG.ThemeDark.panel,
+    Text = "Toggle Sound FX",
+    Font = Enum.Font.GothamSemibold,
+    TextSize = 14,
+    TextColor3 = CONFIG.ThemeDark.text
+}, lePanel)
+local playSfx = true
+
+-- ===== Hotkeys panel =====
+local hkPanel = panels["Hotkeys"]
+local hkInfo = createInstance("TextLabel", {
+    Parent = hkPanel,
+    Position = UDim2.new(0,10,0,6),
+    Size = UDim2.new(1,-20,0,200),
+    BackgroundTransparency = 1,
+    Text = "Hotkeys:\nM = Toggle Menu\nP = Toggle Potato Mode\nU = Toggle Ultra FPS Mode\nL = Run Cleanup\n(You can change these in code)",
+    TextWrapped = true,
+    TextColor3 = CONFIG.ThemeDark.text,
+    Font = Enum.Font.Gotham,
+    TextSize = 14
+}, hkPanel)
+
+-- ===== About panel =====
+local about = panels["About"]
+local aboutLbl = createInstance("TextLabel", {
+    Parent = about,
+    Position = UDim2.new(0,10,0,6),
+    Size = UDim2.new(1,-20,0,200),
+    BackgroundTransparency = 1,
+    Text = "GiHung Hub — Performance Toolkit\nSafe version. No cheats, no server-side changes. Focused on client performance and nice UI.",
+    TextWrapped = true,
+    TextColor3 = CONFIG.ThemeDark.text,
+    Font = Enum.Font.Gotham,
+    TextSize = 14
+}, about)
+
+-- ===== Core functionality =====
+
+-- FPS/Ping/Memory monitor
+local fpsWindow = {last = tick(), fps = 0, avg = 0}
+RunService.RenderStepped:Connect(function(dt)
+    local now = tick()
+    fpsWindow.fps = 1/dt
+    fpsWindow.avg = fpsWindow.avg*0.9 + fpsWindow.fps*0.1
+    fpsLabel.Text = ("FPS: %d (avg: %d)"):format(math.floor(fpsWindow.fps), math.floor(fpsWindow.avg))
+    local ping = 0
+    if LocalPlayer and LocalPlayer:GetNetworkPing then
+        pcall(function() ping = math.floor(LocalPlayer:GetNetworkPing()*1000) end)
+    end
+    pingLabel.Text = ("Ping (approx): %d ms"):format(ping)
+    memLabel.Text = ("Memory (KB): %d"):format(math.floor(collectgarbage("count")))
+    -- Adaptive behavior
+    if fpsWindow.avg < CONFIG.AdaptiveFPS_Threshold then
+        -- reduce effects automatically
+        if not CONFIG.Potato_Mode then
+            -- temporarily lower lighting and disable some heavy effects client-side
+            Lighting.GlobalShadows = false
+            pcall(function() settings().Rendering.QualityLevel = CONFIG.UltraFPS_Quality end)
+        end
+    end
+end)
+
+-- Ultra FPS mode toggle
+local ultraActive = false
+UltraFPSBtn.MouseButton1Click:Connect(function()
+    ultraActive = not ultraActive
+    if ultraActive then
+        Lighting.GlobalShadows = false
+        pcall(function() settings().Rendering.QualityLevel = CONFIG.UltraFPS_Quality end)
+        UltraFPSBtn.Text = "Ultra FPS: ON"
+    else
+        Lighting.GlobalShadows = true
+        pcall(function() settings().Rendering.QualityLevel = CONFIG.Default_Quality end)
+        UltraFPSBtn.Text = "Toggle Ultra FPS Mode"
+    end
+end)
+
+-- Lower / Restore quality
+btnLowerQuality.MouseButton1Click:Connect(function()
+    Lighting.GlobalShadows = false
+    Lighting.Brightness = 1
+    Lighting.FogEnd = 100000
+    pcall(function() settings().Rendering.QualityLevel = CONFIG.UltraFPS_Quality end)
+end)
+btnRestoreQuality.MouseButton1Click:Connect(function()
+    Lighting.GlobalShadows = true
+    Lighting.Brightness = 2
+    Lighting.FogEnd = 1000
+    pcall(function() settings().Rendering.QualityLevel = CONFIG.Default_Quality end)
+end)
+
+-- Potato toggle
+local function enablePotato()
+    CONFIG.Potato_Mode = true
+    -- Lighting changes
+    Lighting.GlobalShadows = false
+    Lighting.OutdoorAmbient = Color3.fromRGB(120,120,120)
+    Lighting.Brightness = 1
+    Lighting.FogEnd = 100000
+    -- disable heavy effects client-side
+    for _,v in pairs(workspace:GetDescendants()) do
+        if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Fire") then
+            pcall(function() v.Enabled = false end)
+        elseif v:IsA("Decal") or v:IsA("Texture") then
+            pcall(function() v.Transparency = 1 end)
+        elseif v:IsA("BasePart") then
+            pcall(function()
+                v.Material = Enum.Material.Plastic
+                v.Reflectance = 0
+            end)
+        end
+    end
+end
+
+local function disablePotato()
+    CONFIG.Potato_Mode = false
+    Lighting.GlobalShadows = true
+    Lighting.OutdoorAmbient = Color3.fromRGB(178,178,178)
+    Lighting.Brightness = 2
+    Lighting.FogEnd = 1000
+    -- try to restore some values (best-effort)
+    for _,v in pairs(workspace:GetDescendants()) do
+        if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Fire") then
+            pcall(function() v.Enabled = true end)
+        elseif v:IsA("Decal") or v:IsA("Texture") then
+            pcall(function() v.Transparency = 0 end)
+        end
+    end
+end
+
+PotatoToggle.MouseButton1Click:Connect(function()
+    if CONFIG.Potato_Mode then
+        disablePotato()
+        PotatoToggle.Text = "Enable Potato Mode"
+    else
+        enablePotato()
+        PotatoToggle.Text = "Disable Potato Mode"
+    end
+end)
+
+-- Cleanup function
+local function runCleanup()
+    -- disable heavy emitters and remove client textures/decals to free memory
+    for _,v in pairs(workspace:GetDescendants()) do
+        if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Fire") then
+            pcall(function() v.Enabled = false end)
+        elseif v:IsA("Decal") or v:IsA("Texture") then
+            -- hide client-side
+            pcall(function() v.Transparency = 1 end)
+        end
+    end
+    -- attempt GC
+    collectgarbage("collect")
+end
+
+btnRunCleanup.MouseButton1Click:Connect(function()
+    runCleanup()
+end)
+
+-- Play load effect (client-only)
+local function playLoadEffect()
+    local char = LocalPlayer.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+    local hrp = char.HumanoidRootPart
+    -- small transient part with point light + particle emitter
+    local part = Instance.new("Part")
+    part.Transparency = 1
+    part.Anchored = true
+    part.CanCollide = false
+    part.Size = Vector3.new(1,1,1)
+    part.CFrame = hrp.CFrame
+    part.Parent = workspace
+    local light = Instance.new("PointLight", part)
+    light.Color = CONFIG.ThemeDark.accent
+    light.Range = 12
+    light.Brightness = 5
+    -- particle (very light)
+    local pe = Instance.new("ParticleEmitter", part)
+    pe.Texture = "rbxassetid://241594314" -- subtle sparkle
+    pe.Lifetime = NumberRange.new(0.4,0.8)
+    pe.Rate = 120
+    pe.Speed = NumberRange.new(4,8)
+    pe.Size = NumberSequence.new(0.6)
+    pe.SpreadAngle = Vector2.new(180,180)
+    spawn(function()
+        wait(1.5)
+        pe.Enabled = false
+        for i=1,10 do
+            light.Brightness = light.Brightness - 0.5
+            wait(0.06)
+        end
+        pcall(function() part:Destroy() end)
+    end)
+    -- optional sound (very short)
+    if playSfx then
+        local s = Instance.new("Sound", workspace)
+        s.SoundId = "rbxassetid://911882733" -- placeholder short chime (replace if needed)
+        s.Looped = false
+        s.Volume = 0.6
+        pcall(function() s:Play() end)
+        game:GetService("Debris"):AddItem(s,2)
+    end
+end
+
+btnPlayLoad.MouseButton1Click:Connect(playLoadEffect)
+sfxToggle.MouseButton1Click:Connect(function() playSfx = not playSfx sfxToggle.Text = playSfx and "Toggle Sound FX (ON)" or "Toggle Sound FX (OFF)" end)
+
+-- Hotkeys
+local menuVisible = true
+local function toggleMenu()
+    menuVisible = not menuVisible
+    MainFrame.Visible = menuVisible
+end
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.UserInputType == Enum.UserInputType.Keyboard then
+        local kc = input.KeyCode
+        if kc == Enum.KeyCode.M then
+            toggleMenu()
+        elseif kc == Enum.KeyCode.P then
+            -- toggle potato
+            PotatoToggle:Activate()
+        elseif kc == Enum.KeyCode.U then
+            UltraFPSBtn:Activate()
+        elseif kc == Enum.KeyCode.L then
+            runCleanup()
+        end
+    end
+end)
+
+-- Initial load effect and setup
+spawn(function()
+    safeWait(0.2)
+    playLoadEffect()
+    -- initial adaptive check: if very low FPS, enable potato
+    safeWait(0.6)
+    -- attempt to set reasonable defaults without being too aggressive
+    pcall(function() settings().Rendering.QualityLevel = CONFIG.Default_Quality end)
+end)
+
+-- Print status
+print("GiHung Hub — Performance Toolkit loaded (safe). Use M to toggle menu, P to toggle Potato Mode.")
+
+-- Expose a simple API on the ScreenGui for future extension by user (safe)
+local API = {}
+API.EnablePotato = enablePotato
+API.DisablePotato = disablePotato
+API.RunCleanup = runCleanup
+API.PlayLoadEffect = playLoadEffect
+API.ToggleMenu = toggleMenu
+ScreenGui:SetAttribute("GiHung_API", HttpService:JSONEncode({hasAPI=true}))
+
+-- Done
