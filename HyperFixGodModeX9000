@@ -1,0 +1,215 @@
+-- Loadstring All-Game-Ready: GiHung Hub – HyperFix GODMODE X9000
+
+loadstring([[
+-- GiHung Hub – HyperFix GODMODE X9000
+local CoreGui = game:GetService("CoreGui")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+
+-- Create ScreenGui
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "GiHungHub_GODMODE_X9000"
+ScreenGui.Parent = CoreGui
+
+-- Main Frame
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(0, 340, 0, 520)
+MainFrame.Position = UDim2.new(0.5, -170, 0.5, -260)
+MainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+MainFrame.BorderSizePixel = 0
+MainFrame.Parent = ScreenGui
+MainFrame.Active = true
+MainFrame.Draggable = true
+
+-- Logo + Title
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, 0, 0, 60)
+Title.Position = UDim2.new(0, 0, 0, 0)
+Title.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+Title.Text = "GiHung Hub – HyperFix GODMODE X9000"
+Title.TextColor3 = Color3.fromRGB(0, 255, 255)
+Title.Font = Enum.Font.SourceSansBold
+Title.TextSize = 22
+Title.Parent = MainFrame
+
+-- FPS Label
+local FPSLabel = Instance.new("TextLabel")
+FPSLabel.Size = UDim2.new(1,0,0,30)
+FPSLabel.Position = UDim2.new(0,0,1,-30)
+FPSLabel.BackgroundTransparency = 1
+FPSLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
+FPSLabel.Font = Enum.Font.SourceSansBold
+FPSLabel.TextSize = 18
+FPSLabel.Text = "FPS: Loading..."
+FPSLabel.Parent = MainFrame
+
+-- Auto Fix Lag toggle
+local AutoFixEnabled = true
+
+-- Update FPS
+spawn(function()
+    local lastTime = tick()
+    while true do
+        RunService.RenderStepped:Wait()
+        local currentTime = tick()
+        local fps = math.floor(1/(currentTime - lastTime))
+        FPSLabel.Text = "FPS: "..fps
+        lastTime = currentTime
+    end
+end)
+
+-- Auto Fix Lag function
+local function AutoFixLag()
+    while AutoFixEnabled do
+        for _,v in pairs(Workspace:GetDescendants()) do
+            if not v:IsA("Humanoid") and not v:IsA("Player") then
+                -- Remove particle/trail/fire/sparkles/light/decal
+                for _,child in pairs(v:GetChildren()) do
+                    if child:IsA("ParticleEmitter") or child:IsA("Trail") or
+                       child:IsA("Fire") or child:IsA("Sparkles") or
+                       child:IsA("PointLight") or child:IsA("SurfaceLight") or
+                       child:IsA("Decal") then
+                        child:Destroy()
+                    end
+                end
+                -- Reduce material and shadows
+                if v:IsA("BasePart") or v:IsA("MeshPart") then
+                    v.Material = Enum.Material.SmoothPlastic
+                    v.CastShadow = false
+                    v.Transparency = 0.5
+                end
+            end
+        end
+        RunService.RenderStepped:Wait()
+    end
+end
+spawn(AutoFixLag)
+
+-- Dynamic Graphics Reduction based on FPS
+spawn(function()
+    while true do
+        RunService.RenderStepped:Wait()
+        local fps = tonumber(FPSLabel.Text:match("%d+")) or 60
+        for _,v in pairs(Workspace:GetDescendants()) do
+            if v:IsA("BasePart") or v:IsA("MeshPart") then
+                if fps < 10 then
+                    v.Material = Enum.Material.Plastic
+                    v.CastShadow = false
+                    v.Transparency = 0.99
+                elseif fps < 30 then
+                    v.Material = Enum.Material.Plastic
+                    v.CastShadow = false
+                    v.Transparency = 0.8
+                elseif fps < 50 then
+                    v.Material = Enum.Material.SmoothPlastic
+                    v.CastShadow = false
+                    v.Transparency = 0.5
+                else
+                    v.Material = Enum.Material.SmoothPlastic
+                    v.CastShadow = true
+                    v.Transparency = 0
+                end
+            end
+        end
+    end
+end)
+
+-- Create buttons
+local function createButton(name, yPos, callback)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0.9, 0, 0, 40)
+    btn.Position = UDim2.new(0.05,0,0,yPos)
+    btn.BackgroundColor3 = Color3.fromRGB(50,50,50)
+    btn.TextColor3 = Color3.fromRGB(255,255,255)
+    btn.Font = Enum.Font.SourceSansBold
+    btn.TextSize = 18
+    btn.Text = name
+    btn.Parent = MainFrame
+    btn.MouseButton1Click:Connect(callback)
+end
+
+-- Buttons
+createButton("Toggle Auto Fix Lag", 70, function()
+    AutoFixEnabled = not AutoFixEnabled
+end)
+
+createButton("Reduce Graphics 20%", 120, function()
+    for _,v in pairs(Workspace:GetDescendants()) do
+        if v:IsA("BasePart") or v:IsA("MeshPart") then
+            v.Material = Enum.Material.Plastic
+            v.CastShadow = false
+        end
+    end
+end)
+
+createButton("Reduce Graphics 40%", 170, function()
+    for _,v in pairs(Workspace:GetDescendants()) do
+        if v:IsA("BasePart") or v:IsA("MeshPart") then
+            v.Material = Enum.Material.Plastic
+            v.CastShadow = false
+            for _,p in pairs(v:GetChildren()) do
+                if p:IsA("ParticleEmitter") or p:IsA("Trail") then
+                    p:Destroy()
+                end
+            end
+        end
+    end
+end)
+
+createButton("Reduce Graphics 60%", 220, function()
+    for _,v in pairs(Workspace:GetDescendants()) do
+        if v:IsA("BasePart") or v:IsA("MeshPart") then
+            v.Material = Enum.Material.SmoothPlastic
+            v.CastShadow = false
+            v.Transparency = 0.5
+            for _,p in pairs(v:GetChildren()) do
+                if p:IsA("ParticleEmitter") or p:IsA("Trail") then
+                    p:Destroy()
+                end
+            end
+        end
+    end
+end)
+
+createButton("Reduce Graphics 80%", 270, function()
+    for _,v in pairs(Workspace:GetDescendants()) do
+        if v:IsA("BasePart") or v:IsA("MeshPart") then
+            v.Material = Enum.Material.SmoothPlastic
+            v.CastShadow = false
+            v.Transparency = 0.8
+            for _,p in pairs(v:GetChildren()) do
+                if p:IsA("ParticleEmitter") or p:IsA("Trail") then
+                    p:Destroy()
+                end
+            end
+        end
+    end
+end)
+
+createButton("Reduce Graphics 99%", 320, function()
+    for _,v in pairs(Workspace:GetDescendants()) do
+        if v:IsA("BasePart") or v:IsA("MeshPart") then
+            v.Material = Enum.Material.Plastic
+            v.CastShadow = false
+            v.Transparency = 0.99
+            for _,p in pairs(v:GetChildren()) do
+                if p:IsA("ParticleEmitter") or p:IsA("Trail") then
+                    p:Destroy()
+                end
+            end
+        end
+    end
+end)
+
+createButton("Fix Lag Now", 370, function()
+    for i=1,5 do
+        spawn(AutoFixLag)
+    end
+end)
+
+createButton("Show Lag Tips", 420, function()
+    print("GiHung Hub Tip: Reduce graphics, remove particle effects, avoid admin spam, enjoy max FPS!")
+end)
+
+print("GiHung Hub – HyperFix GODMODE X9000 loaded! Enjoy ultimate lag-free gameplay!")
+]])()
